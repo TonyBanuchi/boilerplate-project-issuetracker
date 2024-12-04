@@ -37,7 +37,11 @@ module.exports = function (app) {
       if (qKeys) {
         qKeys.forEach((qk) => {
           if (qk !== 'vscodeBrowserReqId') {
-            filter[qk] = req.query[qk];
+            if (qk === '_id') {
+              filter._id = new ObjectId(req.query._id);
+            } else {
+              filter[qk] = req.query[qk];
+            }
           }
         });
       }
@@ -68,8 +72,8 @@ module.exports = function (app) {
             issue_title,
             issue_text,
             created_by,
-            assigned_to,
-            status_text,
+            assigned_to: assigned_to || '',
+            status_text: status_text || '',
             open: true,
             created_on: new Date(),
             updated_on: new Date()
@@ -109,7 +113,7 @@ module.exports = function (app) {
             }
           );
         } else {
-          result = { error: "missing required fields" };
+          result = { error: "required field(s) missing" };
         }
 
         res.json(result);
@@ -123,42 +127,46 @@ module.exports = function (app) {
         let result;
         const { _id } = req.body;
         // invalid id or missing id
-        if (!_id || _id.length === 0){
-          result = { "error": "could not update, no _id provided" };
+        if (!_id || _id.length === 0) {
+          result = { error: 'missing _id' };
         } else if (_id.length !== 24) {
-            result = { "error": "could not update", "_id": _id };
+          result = { error: 'could not update', '_id': _id };
         } else {
           const objectId = new ObjectId(_id);
           const updateContent = {};
           const bodyKeys = Object.keys(req.body);
-          for (const ui of bodyKeys) {
-            if (ui !== '_id' && req.body[ui]) {
-              if (ui === 'open') {
-                updateContent.open = false;
-              } else {
-                updateContent[ui] = req.body[ui];
+          if (bodyKeys.length === 1 && bodyKeys[0] === '_id') {
+            result = { error: 'no update field(s) sent', '_id': _id };
+          } else {
+            for (const ui of bodyKeys) {
+              if (ui !== '_id' && req.body[ui]) {
+                if (ui === 'open') {
+                  updateContent.open = false;
+                } else {
+                  updateContent[ui] = req.body[ui];
+                }
               }
             }
+
+            updateContent.updated_on = new Date();
+
+            await dbCollection.findOneAndUpdate({ _id: objectId }, { $set: updateContent }, { includeResultMetadata: true }).then(
+              (modResult) => {
+                if (modResult.ok && modResult.value !== null) {
+                  result = { "result": "successfully updated", "_id": _id }
+                } else {
+                  result = { error: 'could not update', '_id': _id };
+                }
+              }
+            ).catch(
+              (err) => {
+                result = { error: 'could not update', '_id': _id };
+              }
+            );
           }
-
-          updateContent.updated_on = new Date();
-
-          await dbCollection.findOneAndUpdate({ _id: objectId }, {$set: updateContent}, { includeResultMetadata: true }).then(
-            (modResult) => {
-              if (modResult.ok) {
-                result = { "result": "successfully updated", "_id": _id }
-              } else {
-                result = { "error": "could not update", "_id": _id };
-              }
-            }
-          ).catch(
-            (err) => {
-              result = { "error": `could not update internal error: ${err}`, "_id": _id };
-            }
-          );
         }
         res.json(result);
-        return;
+          return;
       } catch (e) {
         console.error(e);
         res.sendStatus(500);
@@ -172,8 +180,8 @@ module.exports = function (app) {
         let result;
         const _id = req.body._id;
         // invalid id or missing id
-        if (!_id || _id.length === 0){
-          result = { "error": "could not delete, no _id provided" };
+        if (!_id || _id.length === 0) {
+          result = { error: 'missing _id' };
         } else if (_id.length !== 24) {
           result = { "error": "could not delete", "_id": _id };
         } else {
@@ -181,8 +189,8 @@ module.exports = function (app) {
 
           await dbCollection.findOneAndDelete({ _id: objectId }, { includeResultMetadata: true }).then(
             (modResult) => {
-              if (modResult.ok) {
-                result = { "result": "successfully deleted", "_id": _id }
+              if (modResult.ok && modResult.value !== null) {
+                result = { result: 'successfully deleted', '_id': _id }
               } else {
                 result = { "error": "could not delete", "_id": _id };
               }

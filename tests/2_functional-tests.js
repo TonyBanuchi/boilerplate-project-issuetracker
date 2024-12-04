@@ -3,6 +3,7 @@ const chai = require('chai');
 const assert = chai.assert;
 const server = require('../server');
 const req = require('express/lib/request');
+const {ObjectId} = require('mongodb')
 
 chai.use(chaiHttp);
 const siteUrl = 'https://3000-tonybanuchi-boilerplate-id29srsh42d.ws-us117.gitpod.io';
@@ -90,7 +91,7 @@ suite('Functional Tests', function () {
                     assert.equal(res.status, 200, 'Response status should be 200');
                     assert.deepEqual(
                         res.body,
-                        { "error": "missing required fields" },
+                        { "error": "required field(s) missing" },
                         'Response should be an error on creation'
                     );
                     done();
@@ -191,7 +192,7 @@ suite('Functional Tests', function () {
                     assert.equal(res.status, 200, 'Response status should be 200');
                     assert.deepEqual(
                         res.body,
-                        { "error": "could not update, no _id provided" },
+                        { error: 'missing _id' },
                         'Response should contain error object'
                     );
                     done();
@@ -245,6 +246,30 @@ suite('Functional Tests', function () {
                 }
             );
         });
+        // Update an issue with an invalid _id: PUT request to /api/issues/{project}
+        test('Update an issue with an invalid _id', function (done) {
+            const invalidId = new ObjectId().toString();
+            chai.request(server).keepOpen().put('/api/issues/testing').send(
+                {
+                    _id: invalidId,
+                    assigned_to: "Test",
+                    status_text: "Test",
+                    issue_title: "Test",
+                    issue_text: "Test",
+                    created_by: "Test",
+                }
+            ).end(
+                (err, res) => {
+                    assert.equal(res.status, 200, 'Response status should be 200');
+                    assert.deepEqual(
+                        res.body,
+                        { "error": "could not update", "_id": invalidId },
+                        'Response should contain error object'
+                    );
+                    done();
+                }
+            );
+        });
     }); 
     
     suite('Delete - DELETE', () => {
@@ -283,6 +308,23 @@ suite('Functional Tests', function () {
                 }
             );
         });
+        // Delete an issue with an invalid _id: DELETE request to /api/issues/{project}
+        test('Delete an issue with an invalid _id', function (done) {
+            const invalidId = new ObjectId().toString();
+            chai.request(server).keepOpen().delete('/api/issues/testing').send(
+                { _id: invalidId }
+            ).end(
+                (err, res) => {
+                    assert.equal(res.status, 200, 'Response status should be 200');
+                    assert.deepEqual(
+                        res.body,
+                        { "error": "could not delete", "_id": invalidId },
+                        'Response should contain new issue object'
+                    );
+                    done();
+                }
+            );
+        });
         // Delete an issue with missing _id: DELETE request to /api/issues/{project}
         test('Delete an issue with missing _id', function (done) {
             chai.request(server).keepOpen().delete('/api/issues/testing').send(
@@ -292,7 +334,7 @@ suite('Functional Tests', function () {
                     assert.equal(res.status, 200, 'Response status should be 200');
                     assert.deepEqual(
                         res.body,
-                        { "error": "could not delete, no _id provided" },
+                        { error: 'missing _id' },
                         'Response should contain error object'
                     );
                     done();
